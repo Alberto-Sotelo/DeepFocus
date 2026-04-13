@@ -1,0 +1,2 @@
+[] Crear carpetas para cada componente
+[] Seccionar componentes 
