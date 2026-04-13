@@ -1034,7 +1034,7 @@ export default function App() {
       setToast({ message:"¡Descanso terminado! A enfocarse.", icon:"bi-lightning-charge-fill" });
     }
     if (Notification.permission === "granted")
-      new Notification("Deep Work", { body:wasWork?"Tómate un descanso 🧘":"A trabajar 🎯", silent:false });
+      new Notification("Deep Focus", { body:wasWork?"Tómate un descanso 🧘":"A trabajar 🎯", silent:false });
   }, []);
 
   const timer = usePomodoro(onComplete);
