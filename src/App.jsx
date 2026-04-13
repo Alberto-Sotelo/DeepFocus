@@ -1070,7 +1070,7 @@ export default function App() {
         {/* HEADER */}
         <header style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"18px 26px" }}>
           <div>
-            <div style={{ color:"white", fontWeight:300, fontSize:17, letterSpacing:"0.14em", textTransform:"uppercase" }}>Deep Work</div>
+            <div style={{ color:"white", fontWeight:300, fontSize:17, letterSpacing:"0.14em", textTransform:"uppercase" }}>Deep Focus</div>
             <div style={{ color:"rgba(255,255,255,0.28)", fontSize:10, letterSpacing:"0.05em", marginTop:2 }}>
               {timer.total>0 ? `${fmtMin(timer.total)} enfocado hoy` : "Listo para enfocarte"}
             </div>
