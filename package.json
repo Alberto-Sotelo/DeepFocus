@@ -2,13 +2,10 @@
   "name": "deep-work-app",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://Alberto-Sotelo.github.io/DeepFocus",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "predeploy": "npm run build",        
-    "deploy": "gh-pages -d dist", 
+    "build": "vite build", 
     "lint": "eslint .",
     "preview": "vite preview"
   },
