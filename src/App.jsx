@@ -38,8 +38,8 @@ const YOUTUBE_VIDEOS = [
   { id: "4xDzrJKXOOY", label: "Radio Synthwave" },
   { id: "S_MOd40zlYU", label: "Dark Ambient" },
   { id: "IU-dnL1hJ1Q", label: "Elliot Room" },
-  { id: "h4oxQo_8-HE", label: "Rainy Window" },
-  { id: "V1bFr2SWP1I", label: "Fireplace 4K" },
+  { id: "mPZkdNFkNps", label: "Rainy Window" },
+  { id: "g6Ye4xwXyAw", label: "Fireplace 4K" },
 ];
 
 const SOUND_TRACKS = {

@@ -1,11 +1,8 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// vite.config.js
-export default {
+export default defineConfig({
   plugins: [react()],
-  server: {
-    host: true, // Expone en red local también
-  },
-}
-
+  base: '/DeepFocus/', // <-- Línea CRUCIAL: el nombre de tu repositorio
+  server: { host: true },
+});
