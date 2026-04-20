@@ -184,8 +184,11 @@ function usePomodoro(onComplete) {
             if (wasWork) {
               const stats = addFocusMins(workRef.current);
               setTotal(stats[todayKey()] || 0);
-              setSess((c) => c + 1);
-            }
+                } else {
+                 // ✅ Incrementa solo cuando termina el descanso
+                  // Una sesión completa = trabajo + descanso
+                  setSess((c) => c + 1);
+}
             onComplete(wasWork);
             setIsWork(nextWork);
             setSecs(nextWork ? workRef.current * 60 : restRef.current * 60);
