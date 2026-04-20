@@ -149,24 +149,18 @@ function useSoundMixer() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// HOOK: POMODORO — bug fix completo
-// PROBLEMA ANTERIOR: setSeconds devolvía 0 y luego setIsWork / setRunning
-// dentro del closure del interval estaban desactualizados → el descanso
-// no arrancaba, pausar reiniciaba el tiempo.
-// SOLUCIÓN: refs para isWork, work y rest. setTimeout(0) para cambios de
-// fase fuera del reducer. Pausar = solo setRunning(false), sin tocar seconds.
+// HOOK: POMODORO
 // ─────────────────────────────────────────────────────────────
 function usePomodoro(onComplete) {
   const [preset, setPreset]   = useState(PRESETS[0]);
-  const [cw, setCw]           = useState(25); // custom work mins
-  const [cr, setCr]           = useState(5);  // custom rest mins
+  const [cw, setCw]           = useState(25);
+  const [cr, setCr]           = useState(5);
   const [running, setRunning] = useState(false);
   const [isWork, setIsWork]   = useState(true);
   const [secs, setSecs]       = useState(PRESETS[0].work * 60);
   const [sessions, setSess]   = useState(0);
   const [total, setTotal]     = useState(() => ls.get("dw_stats", {})[todayKey()] || 0);
 
-  // Refs — siempre tienen el valor actual dentro de los closures
   const isWorkRef = useRef(true);
   const workRef   = useRef(PRESETS[0].work);
   const restRef   = useRef(PRESETS[0].rest);
@@ -178,16 +172,13 @@ function usePomodoro(onComplete) {
   useEffect(() => { workRef.current   = ew; },      [ew]);
   useEffect(() => { restRef.current   = er; },      [er]);
 
-  // INTERVAL PRINCIPAL — sólo depende de `running`
   useEffect(() => {
     if (!running) return;
     const iv = setInterval(() => {
       setSecs((prev) => {
         if (prev <= 1) {
-          // Llegamos a 0 — usamos refs para saber qué fase era
           const wasWork = isWorkRef.current;
           clearInterval(iv);
-          // Fuera del ciclo de reducción: actualizar fase y duración
           setTimeout(() => {
             const nextWork = !wasWork;
             if (wasWork) {
@@ -198,7 +189,7 @@ function usePomodoro(onComplete) {
             onComplete(wasWork);
             setIsWork(nextWork);
             setSecs(nextWork ? workRef.current * 60 : restRef.current * 60);
-            setRunning(false); // auto-stop, usuario decide iniciar el descanso
+            setRunning(false);
           }, 0);
           return 0;
         }
@@ -206,16 +197,14 @@ function usePomodoro(onComplete) {
       });
     }, 1000);
     return () => clearInterval(iv);
-  }, [running, onComplete]); // ← SIN isWork/ew/er en deps
+  }, [running, onComplete]);
 
   const toggleRun = useCallback(() => setRunning((r) => !r), []);
-
   const reset = useCallback(() => {
     setRunning(false);
     setIsWork(true);
     setSecs(workRef.current * 60);
   }, []);
-
   const changePreset = useCallback((p) => {
     setPreset(p);
     setRunning(false);
@@ -233,58 +222,130 @@ function usePomodoro(onComplete) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// COMPONENTE: VIDEO BACKGROUND
+// COMPONENTE: VIDEO BACKGROUND (CORREGIDO)
 // ─────────────────────────────────────────────────────────────
 function VideoBg({ videoId, customBg, muted }) {
   const playerRef = useRef(null);
-  const divRef    = useRef(null);
-  const ready     = useRef(false);
+  const containerRef = useRef(null);
+  const ready = useRef(false);
 
+  // Inicializar el reproductor de YouTube
   useEffect(() => {
     if (customBg) return;
-    const init = () => {
-      if (!divRef.current) return;
-      try { playerRef.current?.destroy(); } catch (_) {}
-      playerRef.current = new window.YT.Player(divRef.current, {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const initPlayer = () => {
+      if (!window.YT?.Player) return;
+      try {
+        if (playerRef.current) playerRef.current.destroy();
+      } catch (e) {}
+      playerRef.current = new window.YT.Player(container, {
         videoId,
-        playerVars: { autoplay:1, controls:0, loop:1, playlist:videoId, mute:1, modestbranding:1, playsinline:1, rel:0, fs:0 },
-        events: { onReady: (e) => { e.target.playVideo(); ready.current = true; } },
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          loop: 1,
+          playlist: videoId,
+          mute: 1,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          fs: 0,
+        },
+        events: {
+          onReady: (e) => {
+            e.target.playVideo();
+            ready.current = true;
+          },
+        },
       });
     };
-    if (window.YT?.Player) { init(); }
-    else {
-      window.onYouTubeIframeAPIReady = init;
+
+    if (window.YT?.Player) {
+      initPlayer();
+    } else {
+      window.onYouTubeIframeAPIReady = initPlayer;
       if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        const s = document.createElement("script");
-        s.src = "https://www.youtube.com/iframe_api";
-        document.head.appendChild(s);
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(script);
       }
     }
-    return () => { try { playerRef.current?.destroy(); } catch (_) {} ready.current = false; };
+
+    return () => {
+      try {
+        playerRef.current?.destroy();
+      } catch (e) {}
+      ready.current = false;
+    };
   }, [videoId, customBg]);
 
+  // Control del mute/unmute
   useEffect(() => {
     if (!ready.current || !playerRef.current || customBg) return;
-    try { muted ? playerRef.current.mute() : playerRef.current.unMute(); } catch (_) {}
+    try {
+      muted ? playerRef.current.mute() : playerRef.current.unMute();
+    } catch (e) {}
   }, [muted, customBg]);
 
-  const overlay = <>
-    <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)", zIndex:2 }} />
-    <div style={{ position:"absolute", inset:0, zIndex:3, background:"linear-gradient(to bottom,rgba(0,0,0,.2),transparent,rgba(0,0,0,.5))" }} />
-  </>;
-
-  if (customBg) return (
-    <div style={{ position:"fixed", inset:0, zIndex:-1, backgroundImage:`url(${customBg})`, backgroundSize:"cover", backgroundPosition:"center" }}>
-      {overlay}
-    </div>
+  const overlay = (
+    <>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 2 }} />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 3,
+          background: "linear-gradient(to bottom,rgba(0,0,0,.2),transparent,rgba(0,0,0,.5))",
+        }}
+      />
+    </>
   );
 
+  if (customBg) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: -1,
+          backgroundImage: `url(${customBg})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        {overlay}
+      </div>
+    );
+  }
+
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:-1, overflow:"hidden", background:"#000", pointerEvents:"none" }}>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: -1,
+        overflow: "hidden",
+        background: "#000",
+        pointerEvents: "none",
+      }}
+    >
       {overlay}
-      <div ref={divRef} style={{ position:"absolute", top:"50%", left:"50%",
-        transform:"translate(-50%,-50%)", width:"calc(100vh * 1.778)", minWidth:"100vw",
-        height:"calc(100vw * .5625)", minHeight:"100vh", zIndex:1 }} />
+      <div
+        ref={containerRef}
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%,-50%)",
+          width: "calc(100vh * 1.778)",
+          minWidth: "100vw",
+          height: "calc(100vw * .5625)",
+          minHeight: "100vh",
+          zIndex: 1,
+        }}
+      />
     </div>
   );
 }
@@ -360,30 +421,24 @@ function LiveClock({ userName, accent }) {
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENTE: BREATHING GUIDE
-// CORRECCIÓN: empieza siempre en fase 0 (Inhala) al activar.
-// El ciclo avanza al completar cada duración usando setTimeout.
-// Pausar detiene el timeout sin perder la fase actual.
 // ─────────────────────────────────────────────────────────────
 function BreathingGuide({ accent }) {
   const [active, setActive]     = useState(false);
-  const [phaseIdx, setPhaseIdx] = useState(0); // 0 = Inhala siempre al iniciar
+  const [phaseIdx, setPhaseIdx] = useState(0);
   const timerRef = useRef(null);
-
   const phase = BREATH[phaseIdx];
 
-  // Avance de fase: se activa cuando `active` es true
   useEffect(() => {
     clearTimeout(timerRef.current);
     if (!active) return;
-    // Esperar la duración de la fase actual → pasar a la siguiente
     timerRef.current = setTimeout(() => {
       setPhaseIdx((i) => (i + 1) % BREATH.length);
     }, phase.dur);
     return () => clearTimeout(timerRef.current);
-  }, [active, phaseIdx]); // re-run cuando cambia la fase (para encadenar)
+  }, [active, phaseIdx]);
 
   const toggle = () => {
-    if (!active) setPhaseIdx(0); // siempre empieza en "Inhala"
+    if (!active) setPhaseIdx(0);
     setActive((a) => !a);
   };
 
@@ -431,7 +486,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
       background:"rgba(255,255,255,0.06)", backdropFilter:"blur(28px)",
       border:"1px solid rgba(255,255,255,0.1)", boxShadow:"0 8px 40px rgba(0,0,0,0.22)", minWidth:244 }}>
 
-      {/* Presets */}
       <div style={{ display:"flex", gap:5, flexWrap:"wrap", justifyContent:"center" }}>
         {PRESETS.map((p) => (
           <button key={p.label}
@@ -446,7 +500,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
         ))}
       </div>
 
-      {/* Custom inputs */}
       <AnimatePresence>
         {showCustom && (
           <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:"auto" }} exit={{ opacity:0, height:0 }}
@@ -465,7 +518,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
         )}
       </AnimatePresence>
 
-      {/* Reloj SVG */}
       <div style={{ position:"relative" }}>
         <svg width="150" height="150" style={{ transform:"rotate(-90deg)" }}>
           <circle cx="75" cy="75" r="54" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3.5" />
@@ -486,7 +538,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
         </div>
       </div>
 
-      {/* Progress bar */}
       {showProgress && (
         <div style={{ width:"100%", height:2.5, borderRadius:2, background:"rgba(255,255,255,0.07)", overflow:"hidden" }}>
           <motion.div animate={{ width:`${progress*100}%` }} transition={{ duration:0.85, ease:"linear" }}
@@ -494,7 +545,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
         </div>
       )}
 
-      {/* Controles */}
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <button onClick={reset}
           style={{ width:36, height:36, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.12)",
@@ -513,7 +563,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
         </button>
       </div>
 
-      {/* Stats rápidos */}
       <div style={{ display:"flex", gap:20, alignItems:"center" }}>
         {[{ label:"Sesiones", val:sessions },{ label:"Hoy", val:fmtMin(total) }].map(({ label, val }, i) => (
           <div key={label} style={{ display:"flex", gap:20, alignItems:"center" }}>
@@ -526,7 +575,6 @@ function PomodoroTimer({ timer, accent, showProgress }) {
         ))}
       </div>
 
-      {/* Puntos de sesión */}
       <div style={{ display:"flex", gap:5 }}>
         {Array.from({ length:8 }).map((_,i) => (
           <motion.div key={i}
@@ -664,7 +712,6 @@ function FocusStats({ accent }) {
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENTE: TASK LIST
-// Edición inline, textarea con saltos de línea, editar duración
 // ─────────────────────────────────────────────────────────────
 function TaskList({ accent }) {
   const [tasks, setTasks]   = useState(() => ls.get("dw_tasks", []));
@@ -695,7 +742,7 @@ function TaskList({ accent }) {
   const done    = tasks.filter((t) => t.done);
   const eta     = pending.reduce((a,t) => a+(t.duration||0), 0);
 
-  const gi = { // glass input style
+  const gi = {
     background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)",
     borderRadius:12, color:"white", outline:"none", fontSize:12, padding:"7px 11px", fontFamily:"inherit",
   };
@@ -711,7 +758,6 @@ function TaskList({ accent }) {
         </span>
       </div>
 
-      {/* Input nueva tarea — textarea para saltos de línea */}
       <div style={{ display:"flex", gap:5, marginBottom:12 }}>
         <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} rows={1}
           onKeyDown={(e) => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); add(); } }}
@@ -729,7 +775,6 @@ function TaskList({ accent }) {
         </button>
       </div>
 
-      {/* Lista de pendientes */}
       <div style={{ maxHeight:220, overflowY:"auto" }} className="sa">
         <AnimatePresence>
           {pending.map((task) => (
@@ -787,7 +832,6 @@ function TaskList({ accent }) {
         </AnimatePresence>
       </div>
 
-      {/* Completadas */}
       {done.length > 0 && (
         <div>
           <button onClick={() => setSD((v) => !v)}
@@ -827,19 +871,13 @@ function TaskList({ accent }) {
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENTE: NOTEPAD
-// CORRECCIÓN: ls.get devuelve "" si el valor es null/vacío.
-// El texto se guarda en cada keystroke. Al re-abrir la app
-// recupera el valor desde localStorage correctamente.
 // ─────────────────────────────────────────────────────────────
 function Notepad({ accent }) {
-  // Carga inicial desde localStorage — ls.get devuelve "" como fallback
   const [text, setText]     = useState(() => { const v = ls.get("dw_notepad",""); return typeof v === "string" ? v : ""; });
   const [visible, setVis]   = useState(false);
   const taRef = useRef(null);
 
-  // Persistir en cada cambio
   useEffect(() => { ls.set("dw_notepad", text); }, [text]);
-  // Focus al abrir
   useEffect(() => { if (visible) setTimeout(() => taRef.current?.focus(), 80); }, [visible]);
 
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
@@ -898,7 +936,13 @@ function Notepad({ accent }) {
 function SettingsPanel({ prefs, onChange, accent }) {
   const [open, setOpen] = useState(false);
   const fileRef = useRef(null);
-  const upd = (k, v) => { const n = { ...prefs, [k]:v }; onChange(n); ls.set("dw_prefs", n); };
+  const upd = (k, v) => { 
+  // Si k es un objeto, actualizar múltiples campos
+  const updates = typeof k === 'object' ? k : { [k]: v };
+  const n = { ...prefs, ...updates }; 
+  onChange(n); 
+  ls.set("dw_prefs", n); 
+};
 
   return (
     <div style={{ position:"relative" }}>
@@ -937,9 +981,11 @@ function SettingsPanel({ prefs, onChange, accent }) {
               <div style={{ color:"rgba(255,255,255,0.32)", fontSize:10, marginBottom:8, fontWeight:500 }}>Color de acento</div>
               <div style={{ display:"flex", gap:8 }}>
                 {ACCENT_COLORS.map((c) => (
-                  <button key={c.name} onClick={() => upd("accentColor",c.value)} title={c.name}
+                  <button type="button" key={c.name} 
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => upd("accentColor",c.value)} title={c.name}
                     style={{ width:22, height:22, borderRadius:"50%", background:c.value, cursor:"pointer", padding:0,
-                      border: prefs.accentColor===c.value ? "2.5px solid white" : "2.5px solid transparent" }} />
+                      border: prefs.accentColor===c.value ? "2.5px solid white" : "2.5px solid transparent", userSelect:"none", pointerEvents:"auto", zIndex:10 }} />
                 ))}
               </div>
             </div>
@@ -955,42 +1001,51 @@ function SettingsPanel({ prefs, onChange, accent }) {
               <div key={key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
                 padding:"6px 0", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
                 <span style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>{label}</span>
-                <button onClick={() => upd(key,!prefs[key])}
+                <button type="button" 
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => upd(key,!prefs[key])}
                   style={{ width:36, height:20, borderRadius:10, cursor:"pointer",
                     background: prefs[key] ? accent.replace("0.85","0.7") : "rgba(255,255,255,0.12)",
-                    border:"none", position:"relative", transition:"background 0.2s" }}>
+                    border:"none", position:"relative", transition:"background 0.2s", userSelect:"none", pointerEvents:"auto", zIndex:10 }}>
                   <motion.div animate={{ x:prefs[key]?17:2 }} transition={{ type:"spring", stiffness:300, damping:25 }}
-                    style={{ width:15, height:15, borderRadius:"50%", background:"white", position:"absolute", top:2.5 }} />
+                    style={{ width:15, height:15, borderRadius:"50%", background:"white", position:"absolute", top:2.5, pointerEvents:"none" }} />
                 </button>
               </div>
             ))}
 
             <div style={{ marginTop:13 }}>
               <div style={{ color:"rgba(255,255,255,0.32)", fontSize:10, marginBottom:8, fontWeight:500 }}>Fondo de video</div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:8 }}>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:8, WebkitUserSelect:"none", MozUserSelect:"none", msUserSelect:"none" }}>
                 {YOUTUBE_VIDEOS.map((v) => (
-                  <button key={v.id} onClick={() => { upd("videoId",v.id); upd("customBg",null); }}
+                  <button type="button" key={v.id} 
+                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onClick={() => upd({ videoId: v.id, customBg: null })}
                     style={{ padding:"3px 8px", borderRadius:10, fontSize:9, cursor:"pointer",
                       border:`1px solid ${prefs.videoId===v.id&&!prefs.customBg ? accent : "rgba(255,255,255,0.12)"}`,
                       background: prefs.videoId===v.id&&!prefs.customBg ? accent.replace("0.85","0.15") : "transparent",
-                      color:"rgba(255,255,255,0.55)" }}>
+                      color:"rgba(255,255,255,0.55)", userSelect:"none", pointerEvents:"auto", position:"relative", zIndex:10,
+                      WebkitUserSelect:"none", MozUserSelect:"none", msUserSelect:"none" }}>
                     {v.label}
                   </button>
                 ))}
               </div>
-              <button onClick={() => fileRef.current?.click()}
+              <button type="button" 
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => fileRef.current?.click()}
                 style={{ width:"100%", padding:"7px", borderRadius:10, cursor:"pointer",
                   border:"1px dashed rgba(255,255,255,0.2)",
                   background: prefs.customBg ? accent.replace("0.85","0.1") : "transparent",
-                  color:"rgba(255,255,255,0.4)", fontSize:11, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  color:"rgba(255,255,255,0.4)", fontSize:11, display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                  userSelect:"none", pointerEvents:"auto", position:"relative", zIndex:10 }}>
                 <i className={`bi ${prefs.customBg?"bi-check2-circle":"bi-upload"}`} />
                 {prefs.customBg ? "Imagen cargada" : "Subir imagen de fondo"}
               </button>
               <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
                 onChange={(e) => { const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>upd("customBg",ev.target.result); r.readAsDataURL(f); }} />
               {prefs.customBg && (
-                <button onClick={() => upd("customBg",null)}
-                  style={{ marginTop:5, background:"transparent", border:"none", color:"rgba(255,255,255,0.22)", fontSize:10, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
+                <button type="button" onClick={() => upd("customBg",null)}
+                  style={{ marginTop:5, background:"transparent", border:"none", color:"rgba(255,255,255,0.22)", fontSize:10, cursor:"pointer", display:"flex", alignItems:"center", gap:4,
+                    userSelect:"none", pointerEvents:"auto", position:"relative", zIndex:10 }}>
                   <i className="bi bi-x" /> Quitar imagen
                 </button>
               )}
@@ -1056,7 +1111,13 @@ export default function App() {
     <div style={{ width:"100vw", height:"100vh", overflow:"hidden", position:"relative", userSelect:"none",
       fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter',system-ui,sans-serif" }}>
 
-      <VideoBg videoId={prefs.videoId} customBg={prefs.customBg} muted={vMuted} />
+      {/* 🔧 CORRECCIÓN AQUÍ: key dinámica para forzar remontaje */}
+      <VideoBg 
+        key={prefs.customBg ? 'custom' : prefs.videoId} 
+        videoId={prefs.videoId} 
+        customBg={prefs.customBg} 
+        muted={vMuted} 
+      />
       <Confetti active={confetti} />
       <AnimatePresence>
         {toast && <Toast key={toast.message} {...toast} onDismiss={() => setToast(null)} />}
@@ -1161,7 +1222,7 @@ export default function App() {
         </footer>
       </motion.div>
 
-      {/* ── ZEN MODE — botón flotante para salir ── */}
+      {/* ── ZEN MODE ── */}
       <AnimatePresence>
         {zenMode && (
           <motion.div key="zen" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
